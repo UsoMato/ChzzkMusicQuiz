@@ -1,0 +1,181 @@
+.result-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.result-content {
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+  animation: fadeIn 0.5s ease-in;
+}
+
+.result-title {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.no-players {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 3rem;
+  margin-bottom: 2rem;
+  font-size: 1.3rem;
+}
+
+.rankings {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  transition: all 0.3s ease;
+  animation: slideIn 0.5s ease-out backwards;
+}
+
+.ranking-item:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.ranking-item:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ranking-item:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.ranking-item:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+.ranking-item:nth-child(5) {
+  animation-delay: 0.5s;
+}
+
+.ranking-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(5px);
+}
+
+.first-place {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 193, 7, 0.3));
+  border: 2px solid rgba(255, 215, 0, 0.5);
+  transform: scale(1.05);
+}
+
+.first-place:hover {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.4), rgba(255, 193, 7, 0.4));
+  transform: scale(1.05) translateX(5px);
+}
+
+.rank-badge {
+  font-size: 2rem;
+  min-width: 60px;
+}
+
+.player-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  gap: 1rem;
+}
+
+.player-name {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.player-score {
+  font-size: 1.5rem;
+  color: #ffd700;
+  font-weight: bold;
+}
+
+.restart-button {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 1.2rem 3rem;
+  font-size: 1.3rem;
+  font-weight: bold;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.restart-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.restart-button:active {
+  transform: translateY(0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .result-title {
+    font-size: 2rem;
+  }
+
+  .ranking-item {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .rank-badge {
+    font-size: 1.5rem;
+    min-width: 50px;
+  }
+
+  .player-name,
+  .player-score {
+    font-size: 1.2rem;
+  }
+
+  .restart-button {
+    padding: 1rem 2.5rem;
+    font-size: 1.1rem;
+  }
+}

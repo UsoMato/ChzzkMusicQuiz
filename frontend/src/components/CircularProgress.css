@@ -1,0 +1,51 @@
+.circular-progress {
+  position: relative;
+  display: inline-block;
+}
+
+.progress-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.playing-icon,
+.paused-icon {
+  font-size: 3rem;
+  animation: pulse 1.5s infinite;
+}
+
+.play-icon,
+.pause-icon {
+  margin-bottom: 0.5rem;
+}
+
+.progress-text {
+  font-size: 1rem;
+  margin-top: 0.5rem;
+  opacity: 0.8;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.circular-progress:hover {
+  cursor: pointer;
+}
+
+.circular-progress:hover .progress-content {
+  transform: translate(-50%, -50%) scale(1.1);
+}

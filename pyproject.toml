@@ -1,7 +1,11 @@
 [project]
 name = "nomat"
 version = "0.1.0"
-description = "Add your description here"
+description = "노래 맞추기 웹 게임"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "pydantic>=2.9.0",
+]
