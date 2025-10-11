@@ -23,7 +23,7 @@ app.add_middleware(
 # 데이터 모델
 class Song(BaseModel):
     id: int
-    title: str
+    title: List[str]  # 여러 정답 허용 (예: ["다이너마이트", "Dynamite"])
     youtube_url: str
     artist: str
     genre: str
@@ -70,10 +70,22 @@ def load_songs():
                     start_time = int(row.get("start_time", "0"))
                 except (ValueError, TypeError):
                     start_time = 0
-                
+
+                # title을 배열로 파싱
+                # 형식: "[다이너마이트, Dynamite]" 또는 "다이너마이트"
+                title_str = row.get("title", "")
+                if title_str.startswith("[") and title_str.endswith("]"):
+                    # 대괄호 제거하고 쉼표로 분리
+                    title_list = [
+                        t.strip() for t in title_str[1:-1].split(",") if t.strip()
+                    ]
+                else:
+                    # 단일 타이틀
+                    title_list = [title_str.strip()] if title_str.strip() else []
+
                 song = Song(
                     id=idx,
-                    title=row.get("title", ""),
+                    title=title_list,
                     youtube_url=row.get("youtube_url", ""),
                     artist=row.get("artist", ""),
                     genre=row.get("genre", ""),
@@ -177,7 +189,12 @@ async def check_answer(username: str, answer: str):
         raise HTTPException(status_code=404, detail="No current song")
 
     current_song = songs_data[game_state.current_song_index]
-    is_correct = answer.strip().lower() == current_song.title.strip().lower()
+    
+    # 여러 정답 중 하나라도 일치하면 정답으로 인정
+    answer_lower = answer.strip().lower()
+    is_correct = any(
+        answer_lower == title.strip().lower() for title in current_song.title
+    )
 
     if is_correct:
         # 플레이어 점수 업데이트

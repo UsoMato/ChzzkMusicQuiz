@@ -42,6 +42,14 @@
   color: #ffd700;
 }
 
+.song-alternatives {
+  font-size: 1.2rem;
+  margin-bottom: 0.8rem;
+  color: #4facfe;
+  opacity: 0.85;
+  font-style: italic;
+}
+
 .song-artist {
   font-size: 1.5rem;
   margin-bottom: 1rem;

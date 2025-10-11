@@ -69,13 +69,16 @@ npm install
 
 ```csv
 title,youtube_url,artist,genre,hint,start_time
-Dynamite,https://www.youtube.com/watch?v=gdZLi9oWNZg,BTS,K-Pop,다이너마이트,0
-Butter,https://www.youtube.com/watch?v=WMweEpGlu_U,BTS,K-Pop,버터처럼 부드럽게,10
+"[다이너마이트, Dynamite, 다이나마이트]",https://www.youtube.com/watch?v=gdZLi9oWNZg,BTS,K-Pop,다이너마이트,0
+"[Butter, 버터]",https://www.youtube.com/watch?v=WMweEpGlu_U,BTS,K-Pop,버터처럼 부드럽게,10
 ```
 
 **CSV 열 설명:**
 
-- `title`: 노래 제목 (정답)
+- `title`: 노래 제목 (정답, 여러 정답 허용)
+  - 단일 정답: `Dynamite`
+  - 여러 정답: `"[다이너마이트, Dynamite, 다이나마이트]"` (대괄호로 묶고 쉼표로 구분)
+  - 배열 형식을 사용하면 어느 하나를 입력해도 정답으로 인정
 - `youtube_url`: YouTube 영상 URL
 - `artist`: 아티스트명
 - `genre`: 장르

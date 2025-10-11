@@ -6,7 +6,7 @@ import './AnswerPage.css';
 
 interface Song {
   id: number;
-  title: string;
+  title: string[];  // 여러 정답 배열
   youtube_url: string;
   artist: string;
   genre: string;
@@ -79,7 +79,12 @@ function AnswerPage() {
         </div>
 
         <div className="song-info">
-          <h3 className="song-title">{song.title}</h3>
+          <h3 className="song-title">{song.title[0]}</h3>
+          {song.title.length > 1 && (
+            <p className="song-alternatives">
+              또는: {song.title.slice(1).join(', ')}
+            </p>
+          )}
           <p className="song-artist">{song.artist}</p>
           <p className="song-genre">장르: {song.genre}</p>
         </div>
