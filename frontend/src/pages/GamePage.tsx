@@ -146,16 +146,18 @@ function GamePage() {
       setShowArtist(true);
     }, 30000);
 
-    // 힌트 타이머 - 끝나기 15초 전
-    const hintDelay = Math.max(0, playDuration - 15);
-    if (hintDelay > 0) {
-      hintTimerRef.current = setTimeout(() => {
-        console.log('Showing hint');
+    // 힌트 타이머 - 끝나기 15초 전 (힌트가 있을 때만)
+    if (song && song.hint) {
+      const hintDelay = Math.max(0, playDuration - 15);
+      if (hintDelay > 0) {
+        hintTimerRef.current = setTimeout(() => {
+          console.log('Showing hint');
+          setShowHint(true);
+        }, hintDelay * 1000);
+      } else {
+        // 재생 시간이 15초 이하면 즉시 힌트 표시
         setShowHint(true);
-      }, hintDelay * 1000);
-    } else {
-      // 재생 시간이 15초 이하면 즉시 힌트 표시
-      setShowHint(true);
+      }
     }
   };
 
@@ -263,14 +265,14 @@ function GamePage() {
         </div>
 
         <div className="info-section">
-          {showGenre && (
+          {showGenre && song.genre && (
             <div className="genre-info">
               <span className="label">장르:</span>
               <span className="value">{song.genre}</span>
             </div>
           )}
 
-          {showArtist && (
+          {showArtist && song.artist && (
             <div className="artist-info">
               <span className="label">가수:</span>
               <span className="value">{song.artist}</span>

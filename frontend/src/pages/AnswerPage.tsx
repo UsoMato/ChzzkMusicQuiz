@@ -102,8 +102,8 @@ function AnswerPage() {
               또는: {song.title.slice(1).join(', ')}
             </p>
           )}
-          <p className="song-artist">{song.artist}</p>
-          <p className="song-genre">장르: {song.genre}</p>
+          {song.artist && <p className="song-artist">{song.artist}</p>}
+          {song.genre && <p className="song-genre">장르: {song.genre}</p>}
         </div>
 
         <button className="next-button" onClick={handleNext}>
