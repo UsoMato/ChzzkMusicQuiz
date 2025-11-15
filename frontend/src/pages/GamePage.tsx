@@ -22,10 +22,14 @@ function GamePage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showHint, setShowHint] = useState(false);
+  const [showGenre, setShowGenre] = useState(false);
+  const [showArtist, setShowArtist] = useState(false);
   const [volume, setVolume] = useState(100); // 볼륨 (0-100)
   const [actualDuration, setActualDuration] = useState(60); // 실제 재생 시간 (노래 길이와 비교)
   const timerRef = useRef<number | null>(null);
   const hintTimerRef = useRef<number | null>(null);
+  const genreTimerRef = useRef<number | null>(null);
+  const artistTimerRef = useRef<number | null>(null);
   const youtubePlayerRef = useRef<YouTubePlayerHandle>(null);
 
   useEffect(() => {
@@ -34,6 +38,8 @@ function GamePage() {
     setSong(null);
     setProgress(0);
     setShowHint(false);
+    setShowGenre(false);
+    setShowArtist(false);
     setIsPlaying(false);
 
     // 기존 타이머 정리
@@ -45,6 +51,14 @@ function GamePage() {
       clearTimeout(hintTimerRef.current);
       hintTimerRef.current = null;
     }
+    if (genreTimerRef.current) {
+      clearTimeout(genreTimerRef.current);
+      genreTimerRef.current = null;
+    }
+    if (artistTimerRef.current) {
+      clearTimeout(artistTimerRef.current);
+      artistTimerRef.current = null;
+    }
 
     loadCurrentSong();
 
@@ -52,6 +66,8 @@ function GamePage() {
       console.log('GamePage - cleaning up');
       if (timerRef.current) clearInterval(timerRef.current);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+      if (genreTimerRef.current) clearTimeout(genreTimerRef.current);
+      if (artistTimerRef.current) clearTimeout(artistTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
@@ -99,6 +115,8 @@ function GamePage() {
     setIsPlaying(true);
     setProgress(0);
     setShowHint(false);
+    setShowGenre(false);
+    setShowArtist(false);
 
     // YouTube 플레이어를 시작 지점으로 이동
     if (song && song.start_time > 0 && youtubePlayerRef.current) {
@@ -115,6 +133,18 @@ function GamePage() {
         return prev + (100 / playDuration);
       });
     }, 1000);
+
+    // 장르 타이머 - 10초 후 표시
+    genreTimerRef.current = setTimeout(() => {
+      console.log('Showing genre');
+      setShowGenre(true);
+    }, 10000);
+
+    // 가수 타이머 - 30초 후 표시
+    artistTimerRef.current = setTimeout(() => {
+      console.log('Showing artist');
+      setShowArtist(true);
+    }, 30000);
 
     // 힌트 타이머 - 끝나기 15초 전
     const hintDelay = Math.max(0, playDuration - 15);
@@ -138,6 +168,14 @@ function GamePage() {
     if (hintTimerRef.current) {
       clearTimeout(hintTimerRef.current);
       hintTimerRef.current = null;
+    }
+    if (genreTimerRef.current) {
+      clearTimeout(genreTimerRef.current);
+      genreTimerRef.current = null;
+    }
+    if (artistTimerRef.current) {
+      clearTimeout(artistTimerRef.current);
+      artistTimerRef.current = null;
     }
   };
 
@@ -175,7 +213,7 @@ function GamePage() {
 
   const handleSkip = () => {
     stopPlaying();
-    navigate('/answer');
+    navigate('/answer', { state: { skipped: true } });
   };
 
   // 정답자 체크 - 주기적으로 정답자가 있는지 확인
@@ -225,10 +263,19 @@ function GamePage() {
         </div>
 
         <div className="info-section">
-          <div className="genre-info">
-            <span className="label">장르:</span>
-            <span className="value">{song.genre}</span>
-          </div>
+          {showGenre && (
+            <div className="genre-info">
+              <span className="label">장르:</span>
+              <span className="value">{song.genre}</span>
+            </div>
+          )}
+
+          {showArtist && (
+            <div className="artist-info">
+              <span className="label">가수:</span>
+              <span className="value">{song.artist}</span>
+            </div>
+          )}
 
           {showHint && song.hint && (
             <div className="hint-info">
@@ -266,11 +313,6 @@ function GamePage() {
               ⏭ 스킵
             </button>
           </div>
-        </div>
-
-        <div className="chat-info">
-          <p>💬 채팅으로 정답을 입력해주세요!</p>
-          <p className="chat-subinfo">치지직 채팅 연동 대기 중...</p>
         </div>
 
         {/* 숨겨진 YouTube 플레이어 */}

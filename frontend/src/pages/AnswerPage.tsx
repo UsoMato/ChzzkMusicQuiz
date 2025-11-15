@@ -19,6 +19,7 @@ function AnswerPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [song, setSong] = useState<Song | null>(null);
+  const skipped = location.state?.skipped || false;
 
   useEffect(() => {
     // location이 변경될 때마다 (페이지 진입 시마다) 정답 로드
@@ -71,9 +72,13 @@ function AnswerPage() {
     <div className="answer-page">
       <Leaderboard />
       <div className="answer-content">
-        <h2 className="answer-title">🎉 정답입니다! 🎉</h2>
+        {skipped ? (
+          <h2 className="answer-title">😢 안타깝네요! 😢</h2>
+        ) : (
+          <h2 className="answer-title">🎉 정답입니다! 🎉</h2>
+        )}
 
-        {song.winner && (
+        {!skipped && song.winner && (
           <div className="winner-info">
             <p className="winner-text">
               <span className="winner-label">정답자:</span>

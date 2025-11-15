@@ -82,6 +82,7 @@ class GameState(BaseModel):
     current_winner: str = ""  # 현재 노래의 정답자 닉네임
     song_order: List[int] = []  # 랜덤 순서로 재생할 노래 인덱스 리스트
     played_count: int = 0  # 재생한 곡 수
+    showing_answer: bool = False  # 정답 페이지를 보여주는 중인지 여부
 
 
 # 게임 상태 저장
@@ -92,7 +93,8 @@ game_state = GameState(
     show_hint=False, 
     current_winner="",
     song_order=[],
-    played_count=0
+    played_count=0,
+    showing_answer=False
 )
 
 songs_data: List[Song] = []
@@ -156,6 +158,10 @@ def setup_chat_handlers():
         print(f"Received chat from {message.profile.nickname}: {message.content}")
         # 게임이 진행 중이 아니면 무시
         if not game_state.is_playing:
+            return
+
+        # 정답 페이지를 보여주는 중이면 무시 (정답 입력 불가)
+        if game_state.showing_answer:
             return
 
         # 현재 노래가 없으면 무시
@@ -289,6 +295,9 @@ async def get_current_song_answer():
     if game_state.current_song_index >= len(songs_data):
         raise HTTPException(status_code=404, detail="No more songs")
 
+    # 정답 페이지로 진입했음을 표시 (정답 입력 방지)
+    game_state.showing_answer = True
+
     song_data = songs_data[game_state.current_song_index]
     return {
         **song_data.dict(),
@@ -316,6 +325,7 @@ async def start_game():
     game_state.is_playing = True
     game_state.show_hint = False
     game_state.current_winner = ""  # 정답자 초기화
+    game_state.showing_answer = False  # 정답 페이지 플래그 초기화
     
     print(f"Game started with random order: {song_indices[:5]}...")  # 처음 5개만 로그
     return {"message": "Game started", "state": game_state}
@@ -327,6 +337,7 @@ async def next_song():
     game_state.played_count += 1
     game_state.show_hint = False
     game_state.current_winner = ""  # 정답자 초기화
+    game_state.showing_answer = False  # 정답 페이지 플래그 초기화 (새 곡으로 이동하면 정답 입력 가능)
 
     # 모든 곡을 재생했는지 확인
     if game_state.played_count >= len(game_state.song_order):
@@ -355,6 +366,10 @@ async def check_answer(username: str, answer: str):
     """
     if game_state.current_song_index >= len(songs_data):
         raise HTTPException(status_code=404, detail="No current song")
+
+    # 정답 페이지를 보여주는 중이면 정답 입력 불가
+    if game_state.showing_answer:
+        return {"is_correct": False, "username": username, "answer": answer, "message": "정답 페이지 중입니다"}
 
     # 이미 정답자가 있으면 정답이어도 점수 부여하지 않음
     if game_state.current_winner:
