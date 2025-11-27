@@ -1,9 +1,10 @@
 import asyncio
 import csv
 import os
+import sys
 import random
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Optional
 
 import uvicorn
 from chzzkpy.unofficial.chat import ChatClient, ChatMessage
@@ -13,8 +14,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# 환경 변수 로드
-load_dotenv()
+
+# PyInstaller 호환 경로 처리
+def resource_path(relative_path):
+    """PyInstaller 번들 또는 개발 환경에서 리소스 경로 반환 (번들 내부 파일용)"""
+    try:
+        # PyInstaller가 생성한 임시 폴더
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+def get_data_path(relative_path):
+    """실행 파일과 같은 폴더에 있는 데이터 파일 경로 (CSV, .env 등 사용자 파일용)"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller로 빌드된 exe 실행 시
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # 개발 환경
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+# 환경 변수 로드 (실행 파일 폴더의 .env)
+load_dotenv(get_data_path(".env"))
 
 # 채팅 클라이언트 전역 변수
 chat_client = None
@@ -85,6 +109,10 @@ class GameState(BaseModel):
     showing_answer: bool = False  # 정답 페이지를 보여주는 중인지 여부
 
 
+class LoadCsvRequest(BaseModel):
+    filename: str
+
+
 # 게임 상태 저장
 game_state = GameState(
     current_song_index=0, 
@@ -145,15 +173,15 @@ def parse_escaped_list(content: str) -> List[str]:
     return items
 
 
-def load_songs():
+def load_songs(csv_filename: str = "songs.csv"):
     """CSV 파일에서 노래 데이터 로드"""
     global songs_data
     songs_data = []
-    csv_path = "songs.csv"
+    csv_path = get_data_path(csv_filename)
 
     if not os.path.exists(csv_path):
         print(f"Warning: {csv_path} not found. Using empty song list.")
-        return
+        return 0
 
     try:
         with open(csv_path, "r", encoding="utf-8") as file:
@@ -187,8 +215,10 @@ def load_songs():
                 )
                 songs_data.append(song)
         print(f"Loaded {len(songs_data)} songs from CSV")
+        return len(songs_data)
     except Exception as e:
         print(f"Error loading songs: {e}")
+        return 0
 
 
 def setup_chat_handlers():
@@ -297,9 +327,10 @@ async def stop_chat_client():
             print(f"Error closing chat client: {e}")
 
 
-@app.get("/")
-async def root():
-    return {"message": "노래 맞추기 게임 API"}
+@app.get("/api/health")
+async def health_check():
+    """서버 상태 확인 API"""
+    return {"status": "ok", "message": "노래 맞추기 게임 API"}
 
 
 @app.get("/api/songs", response_model=List[Song])
@@ -466,9 +497,48 @@ async def get_game_state():
     }
 
 
+# 새 API: CSV 파일 로드
+@app.post("/api/game/load-csv")
+async def load_csv_file(request: LoadCsvRequest):
+    """지정된 CSV 파일 로드"""
+    csv_path = get_data_path(request.filename)
+    
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail=f"CSV file not found: {request.filename}")
+    
+    count = load_songs(request.filename)
+    return {"message": f"Loaded {count} songs", "song_count": count, "filename": request.filename}
+
+
+# 새 API: 점수 초기화
+@app.post("/api/game/reset-scores")
+async def reset_scores():
+    """모든 참가자 점수 초기화"""
+    game_state.players = []
+    game_state.current_winner = ""
+    return {"message": "Scores reset", "players": []}
+
+
+# 새 API: 전체 참가자 목록 (점수 포함)
+@app.get("/api/game/participants")
+async def get_all_participants():
+    """전체 참가자 목록 반환 (점수 순 정렬)"""
+    sorted_players = sorted(game_state.players, key=lambda p: p.score, reverse=True)
+    return {
+        "total_count": len(sorted_players),
+        "players": [player.dict() for player in sorted_players]
+    }
+
+
 # 프론트엔드 정적 파일 서빙 (빌드 후)
-if os.path.exists("frontend/dist"):
-    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+frontend_dist_path = resource_path("frontend/dist")
+print(f"[NoMat] Frontend path: {frontend_dist_path}")
+print(f"[NoMat] Frontend exists: {os.path.exists(frontend_dist_path)}")
+if os.path.exists(frontend_dist_path):
+    print(f"[NoMat] Mounting frontend at /")
+    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+else:
+    print(f"[NoMat] WARNING: Frontend not found! Game UI will not be available.")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
