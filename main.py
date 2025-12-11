@@ -103,7 +103,7 @@ class GameState(BaseModel):
     players: List[Player]
     is_playing: bool
     show_hint: bool
-    current_winner: str = ""  # 현재 노래의 정답자 닉네임
+    current_winners: List[str] = []  # 현재 노래의 정답자 닉네임 리스트 (최대 3명)
     song_order: List[int] = []  # 랜덤 순서로 재생할 노래 인덱스 리스트
     played_count: int = 0  # 재생한 곡 수
     showing_answer: bool = False  # 정답 페이지를 보여주는 중인지 여부
@@ -119,7 +119,7 @@ game_state = GameState(
     players=[], 
     is_playing=False, 
     show_hint=False, 
-    current_winner="",
+    current_winners=[],
     song_order=[],
     played_count=0,
     showing_answer=False
@@ -251,8 +251,12 @@ def setup_chat_handlers():
 
         current_song = songs_data[game_state.current_song_index]
 
-        # 이미 정답자가 있으면 무시 (최초 정답자만 점수 획득)
-        if game_state.current_winner:
+        # 이미 3명의 정답자가 나왔으면 무시
+        if len(game_state.current_winners) >= 3:
+            return
+
+        # 이미 정답을 맞춘 사람은 무시
+        if username in game_state.current_winners:
             return
 
         # 여러 정답 중 하나라도 일치하면 정답으로 인정 (띄어쓰기 무시)
@@ -263,20 +267,30 @@ def setup_chat_handlers():
         )
 
         if is_correct:
+            # 순위에 따른 점수 계산
+            points = 0
+            rank = len(game_state.current_winners)
+            if rank == 0:
+                points = 5
+            elif rank == 1:
+                points = 3
+            elif rank == 2:
+                points = 1
+
             # 플레이어 점수 업데이트
             player_found = False
             for player in game_state.players:
                 if player.username == username:
-                    player.score += 1
+                    player.score += points
                     player_found = True
                     break
 
             if not player_found:
-                game_state.players.append(Player(username=username, score=1))
+                game_state.players.append(Player(username=username, score=points))
 
             # 현재 노래의 정답자 저장
-            game_state.current_winner = username
-            print(f"✅ {username} 님이 정답을 맞혔습니다: {answer}")
+            game_state.current_winners.append(username)
+            print(f"✅ {username} 님이 정답을 맞혔습니다 ({rank + 1}등, {points}점): {answer}")
 
 
 async def start_chat_client():
@@ -376,14 +390,17 @@ async def get_current_song_answer():
     song_data = songs_data[game_state.current_song_index]
     return {
         **song_data.dict(),
-        "winner": game_state.current_winner  # 정답자 닉네임 포함
+        "winner": ", ".join(game_state.current_winners) if game_state.current_winners else ""
     }
 
 
 @app.get("/api/game/winner")
 async def get_current_winner():
     """현재 노래의 정답자 닉네임 반환"""
-    return {"winner": game_state.current_winner}
+    return {
+        "winner": ", ".join(game_state.current_winners) if game_state.current_winners else "",
+        "winner_count": len(game_state.current_winners)
+    }
 
 
 @app.post("/api/game/start")
@@ -399,7 +416,7 @@ async def start_game():
     game_state.players = []
     game_state.is_playing = True
     game_state.show_hint = False
-    game_state.current_winner = ""  # 정답자 초기화
+    game_state.current_winners = []  # 정답자 초기화
     game_state.showing_answer = False  # 정답 페이지 플래그 초기화
     
     print(f"Game started with random order: {song_indices[:5]}...")  # 처음 5개만 로그
@@ -411,7 +428,7 @@ async def next_song():
     """다음 곡으로 이동 (랜덤 순서)"""
     game_state.played_count += 1
     game_state.show_hint = False
-    game_state.current_winner = ""  # 정답자 초기화
+    game_state.current_winners = []  # 정답자 초기화
     game_state.showing_answer = False  # 정답 페이지 플래그 초기화 (새 곡으로 이동하면 정답 입력 가능)
 
     # 모든 곡을 재생했는지 확인
@@ -446,9 +463,13 @@ async def check_answer(username: str, answer: str):
     if game_state.showing_answer:
         return {"is_correct": False, "username": username, "answer": answer, "message": "정답 페이지 중입니다"}
 
-    # 이미 정답자가 있으면 정답이어도 점수 부여하지 않음
-    if game_state.current_winner:
-        return {"is_correct": False, "username": username, "answer": answer, "message": "이미 정답자가 있습니다"}
+    # 이미 3명의 정답자가 나왔으면 무시
+    if len(game_state.current_winners) >= 3:
+        return {"is_correct": False, "username": username, "answer": answer, "message": "이미 3명의 정답자가 나왔습니다"}
+    
+    # 이미 정답을 맞춘 사람은 무시
+    if username in game_state.current_winners:
+        return {"is_correct": False, "username": username, "answer": answer, "message": "이미 정답을 맞췄습니다"}
 
     current_song = songs_data[game_state.current_song_index]
 
@@ -460,19 +481,29 @@ async def check_answer(username: str, answer: str):
     )
 
     if is_correct:
+        # 순위에 따른 점수 계산
+        points = 0
+        rank = len(game_state.current_winners)
+        if rank == 0:
+            points = 5
+        elif rank == 1:
+            points = 3
+        elif rank == 2:
+            points = 1
+
         # 플레이어 점수 업데이트
         player_found = False
         for player in game_state.players:
             if player.username == username:
-                player.score += 1
+                player.score += points
                 player_found = True
                 break
 
         if not player_found:
-            game_state.players.append(Player(username=username, score=1))
+            game_state.players.append(Player(username=username, score=points))
 
         # 현재 노래의 정답자 저장
-        game_state.current_winner = username
+        game_state.current_winners.append(username)
 
     return {"is_correct": is_correct, "username": username, "answer": answer}
 
@@ -515,7 +546,7 @@ async def load_csv_file(request: LoadCsvRequest):
 async def reset_scores():
     """모든 참가자 점수 초기화"""
     game_state.players = []
-    game_state.current_winner = ""
+    game_state.current_winners = []
     return {"message": "Scores reset", "players": []}
 
 

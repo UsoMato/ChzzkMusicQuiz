@@ -225,8 +225,9 @@ function GamePage() {
     const checkWinner = async () => {
       try {
         const response = await axios.get('/api/game/winner');
-        if (response.data.winner) {
-          console.log('Winner detected:', response.data.winner);
+        // 정답자가 3명 이상일 때만 정답 페이지로 이동
+        if (response.data.winner_count >= 3) {
+          console.log('3 Winners detected:', response.data.winner);
           stopPlaying();
           navigate('/answer');
         }
