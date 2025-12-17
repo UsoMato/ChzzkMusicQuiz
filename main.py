@@ -3,14 +3,16 @@ import csv
 import os
 import sys
 import random
+import json
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import uvicorn
 import aiohttp
+import socketio
 from chzzkpy.unofficial.chat import ChatClient, ChatMessage
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +48,184 @@ load_dotenv(get_data_path(".env"))
 chat_client = None
 chat_task = None
 
+# Socket.IO 클라이언트 (Open API)
+sio = socketio.AsyncClient(reconnection=False, logger=True, engineio_logger=True)
+current_access_token = None
+current_session_key = None
+is_shutting_down = False
+
+
+@sio.event
+async def connect():
+    print("Socket connected")
+
+
+@sio.event
+async def disconnect():
+    print("Socket disconnected")
+    if not is_shutting_down and current_access_token:
+        print("Connection lost. Attempting to reconnect in 1 second...")
+        await asyncio.sleep(1)
+        # 재연결 시도 (새로운 소켓 URL 요청 포함)
+        asyncio.create_task(connect_to_chzzk_socket(current_access_token))
+
+
+@sio.on('SYSTEM')
+async def on_system(data):
+    global current_session_key
+    print(f"SYSTEM event received: {data}")
+    
+    # data가 문자열이면 JSON 파싱
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            print("Failed to parse SYSTEM event data as JSON")
+            return
+
+    # sessionKey 추출
+    # 데이터 구조가 명확하지 않으므로 여러 경로 시도
+    session_key = data.get("sessionKey")
+    if not session_key and isinstance(data, dict) and "data" in data:
+        session_key = data["data"].get("sessionKey")
+    
+    if session_key:
+        current_session_key = session_key
+        print(f"Session Key obtained: {session_key}")
+        if current_access_token:
+            await subscribe_chat(session_key, current_access_token)
+
+
+def handle_game_answer(username: str, answer: str):
+    """게임 정답 처리 로직"""
+    # 게임이 진행 중이 아니면 무시
+    if not game_state.is_playing:
+        return
+
+    # 정답 페이지를 보여주는 중이면 무시 (정답 입력 불가)
+    if game_state.showing_answer:
+        return
+
+    # 현재 노래가 없으면 무시
+    if game_state.current_song_index >= len(songs_data):
+        return
+
+    answer = answer.strip()
+
+    # 빈 메시지 무시
+    if not answer:
+        return
+
+    current_song = songs_data[game_state.current_song_index]
+
+    # 이미 3명의 정답자가 나왔으면 무시
+    if len(game_state.current_winners) >= 3:
+        return
+
+    # 이미 정답을 맞춘 사람은 무시
+    if username in game_state.current_winners:
+        return
+
+    # 여러 정답 중 하나라도 일치하면 정답으로 인정 (띄어쓰기 무시)
+    answer_normalized = answer.lower().replace(" ", "")
+    is_correct = any(
+        answer_normalized == title.strip().lower().replace(" ", "")
+        for title in current_song.title
+    )
+
+    if is_correct:
+        # 순위에 따른 점수 계산
+        points = 0
+        rank = len(game_state.current_winners)
+        if rank == 0:
+            points = 5
+        elif rank == 1:
+            points = 3
+        elif rank == 2:
+            points = 1
+
+        # 플레이어 점수 업데이트
+        player_found = False
+        for player in game_state.players:
+            if player.username == username:
+                player.score += points
+                player_found = True
+                break
+
+        if not player_found:
+            game_state.players.append(Player(username=username, score=points))
+
+        # 현재 노래의 정답자 저장
+        game_state.current_winners.append(username)
+        print(f"✅ {username} 님이 정답을 맞혔습니다 ({rank + 1}등, {points}점): {answer}")
+
+
+@sio.on('CHAT')
+async def on_chat(data):
+    """채팅 메시지 수신 (Open API)"""
+    # print(f"OpenAPI Chat received: {data}")
+
+    # data가 문자열이면 JSON 파싱
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            print("Failed to parse CHAT event data as JSON")
+            return
+
+    # 데이터 구조 파싱
+    content = data.get("content", "")
+    profile = data.get("profile", {})
+    if profile is None:
+        profile = {}
+    nickname = profile.get("nickname", "")
+    
+    if content and nickname:
+        # print(f"Chat: [{nickname}] {content}")
+        handle_game_answer(nickname, content)
+
+
+async def subscribe_chat(session_key: str, access_token: str):
+    """채팅 이벤트 구독"""
+    url = "https://openapi.chzzk.naver.com/open/v1/sessions/events/subscribe/chat"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    params = {"sessionKey": session_key}
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, headers=headers, params=params) as response:
+                if response.status == 200:
+                    print(f"Subscribed to chat events for session {session_key}")
+                else:
+                    text = await response.text()
+                    print(f"Failed to subscribe to chat: {response.status} - {text}")
+        except Exception as e:
+            print(f"Error subscribing to chat: {e}")
+
+
+async def unsubscribe_chat(session_key: str, access_token: str):
+    """채팅 이벤트 구독 취소"""
+    url = "https://openapi.chzzk.naver.com/open/v1/sessions/events/unsubscribe/chat"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    params = {"sessionKey": session_key}
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, headers=headers, params=params) as response:
+                if response.status == 200:
+                    print(f"Unsubscribed from chat events for session {session_key}")
+                else:
+                    text = await response.text()
+                    print(f"Failed to unsubscribe from chat: {response.status} - {text}")
+        except Exception as e:
+            print(f"Error unsubscribing from chat: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,6 +237,17 @@ async def lifespan(app: FastAPI):
     yield
 
     # 서버 종료 시
+    print("Shutting down...")
+    
+    # Open API 소켓 정리
+    if current_session_key and current_access_token:
+        print(f"Unsubscribing from session: {current_session_key}")
+        await unsubscribe_chat(current_session_key, current_access_token)
+    
+    if sio.connected:
+        print("Disconnecting Socket.IO...")
+        await sio.disconnect()
+
     await stop_chat_client()
 
 
@@ -563,8 +754,47 @@ async def get_all_participants():
     }
 
 
+async def connect_to_chzzk_socket(access_token: str):
+    """백그라운드에서 치지직 소켓 URL을 요청하고 연결을 설정"""
+    global current_access_token
+    current_access_token = access_token
+    
+    print(f"Starting background task for Chzzk socket connection...")
+    try:
+        async with aiohttp.ClientSession() as session:
+            # 치지직 Open API 세션 생성 엔드포인트
+            session_url = "https://openapi.chzzk.naver.com/open/v1/sessions/auth"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            async with session.get(session_url, headers=headers) as session_response:
+                if session_response.status == 200:
+                    session_data = await session_response.json()
+                    # session_data 구조: {"code": 200, "message": "Success", "content": {"url": "wss://..."}}
+                    socket_url = session_data.get("content", {}).get("url")
+                    print(f"Background: Socket URL obtained: {socket_url}")
+                    
+                    if socket_url:
+                        try:
+                            # 이미 연결되어 있다면 해제
+                            if sio.connected:
+                                await sio.disconnect()
+                            
+                            # 소켓 연결
+                            await sio.connect(socket_url, transports=['websocket'])
+                            print("Socket.IO connection initiated")
+                        except Exception as e:
+                            print(f"Failed to connect to Socket.IO: {e}")
+                else:
+                    error_text = await session_response.text()
+                    print(f"Background: Failed to get session URL: {session_response.status} - {error_text}")
+    except Exception as e:
+        print(f"Background: Error in socket connection task: {e}")
+
+
 @app.get("/redirect")
-async def chzzk_callback(code: str, state: str):
+async def chzzk_callback(code: str, state: str, background_tasks: BackgroundTasks):
     """치지직 인증 콜백 및 토큰 발급"""
     client_id = os.getenv("CHZZK_CLIENT_ID")
     client_secret = os.getenv("CHZZK_CLIENT_SECRET")
@@ -572,17 +802,14 @@ async def chzzk_callback(code: str, state: str):
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Server configuration error: Missing Client ID or Secret")
 
-    # 치지직 게임 연동 토큰 발급 URL (예시)
-    # 실제 URL은 치지직 개발자 문서를 확인해야 합니다.
-    # 보통 https://comm-api.game.naver.com/nng_main/v1/oauth/token 등을 사용합니다.
-    token_url = "https://comm-api.game.naver.com/nng_main/v1/oauth/token"
+    token_url = "https://openapi.chzzk.naver.com/auth/v1/token"
     
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(token_url, json={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
+                "grantType": "authorization_code",
+                "clientId": client_id,
+                "clientSecret": client_secret,
                 "code": code,
                 "state": state
             }) as response:
@@ -594,6 +821,12 @@ async def chzzk_callback(code: str, state: str):
                 # data 구조: {"code": 200, "message": "Success", "content": {"accessToken": "...", "refreshToken": "...", ...}}
                 
                 print(f"Chzzk Auth Success: {data}")
+
+                # 엑세스 토큰으로 세션 URL 요청 (백그라운드 작업으로 실행)
+                access_token = data.get("content", {}).get("accessToken")
+                if access_token:
+                    background_tasks.add_task(connect_to_chzzk_socket, access_token)
+
                 return RedirectResponse(url="/")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(e)}")
